@@ -1,2 +1,2 @@
-weasyprint
+pdfkit
 flask
