@@ -1,2 +1,6 @@
 .conda
 .vscode
+test.html
+env
+__pycache__
+test.pdf

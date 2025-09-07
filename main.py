@@ -3,9 +3,28 @@ import pdfkit
 import base64
 import sys
 import traceback
+import os
+from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
 
 app = Flask(__name__)
+
+options = {
+    "enable-local-file-access": None
+}
+
+BASE_PATH = os.getenv("BASE_PATH", "")
+
+def rewrite_html_paths(html_content: str) -> str:
+    soup = BeautifulSoup(html_content, "html.parser")
+
+    for img in soup.find_all("img"):
+        src = img.get("src")
+        if src and src.startswith("/userdata/"):
+            img["src"] = f"file://{BASE_PATH}{src}"
+
+    return str(soup)
+
 
 @app.route('/', methods=['POST'])
 def create_pdf():
@@ -16,7 +35,8 @@ def create_pdf():
         if not title or not html_content:
             return jsonify({"success": False, "message": "Missing required parameters"}), 400
 
-        pdf_output = pdfkit.from_string(html_content, False)
+        html_content = rewrite_html_paths(html_content)
+        pdf_output = pdfkit.from_string(html_content, False,options=options)
 
         if pdf_output:
             pdf_base64 = base64.b64encode(pdf_output).decode('utf-8')
