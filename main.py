@@ -4,6 +4,7 @@ import base64
 import sys
 import traceback
 import os
+import re
 from bs4 import BeautifulSoup
 from flask import Flask, request, jsonify
 
@@ -18,13 +19,27 @@ BASE_PATH = os.getenv("BASE_PATH", "")
 def rewrite_html_paths(html_content: str) -> str:
     soup = BeautifulSoup(html_content, "html.parser")
 
-    for img in soup.find_all("img"):
-        src = img.get("src")
-        if src and src.startswith("/userdata/"):
-            img["src"] = f"file://{BASE_PATH}{src}"
+    def needs_rewrite(url: str) -> bool:
+        return not re.match(r'^(?:https?:|data:|file:|//)', url)
+
+    for tag in soup.find_all(src=True):
+        src = tag["src"]
+        if src and needs_rewrite(src):
+            tag["src"] = f"{BASE_PATH}{src}"
+
+    for tag in soup.find_all(style=True):
+        style = tag["style"]
+
+        def repl(match):
+            url = match.group(1).strip('\'"')
+            if url and needs_rewrite(url):
+                return f"url({BASE_PATH}{url})"
+            return match.group(0)
+
+        new_style = re.sub(r'url\((.*?)\)', repl, style)
+        tag["style"] = new_style
 
     return str(soup)
-
 
 @app.route('/', methods=['POST'])
 def create_pdf():
@@ -59,7 +74,6 @@ def safe_run_app(host, port):
             print(f"Starting Flask app on {host}:{port}...", file=sys.stderr)
             app.run(host=host, port=port)
         except Exception as e:
-            # In lỗi ra stderr nhưng không tắt chương trình
             print(f"[ERROR] Flask app crashed: {str(e)}", file=sys.stderr)
             traceback.print_exc(file=sys.stderr)
             print("Restarting Flask app...", file=sys.stderr)
